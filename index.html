@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pixel — a tiny chat companion</title>
+<style>
+  :root{
+    --ink:#1c1b19;
+    --paper:#eee8dd;
+    --panel:#fffdf8;
+    --line:#d8cfbd;
+    --accent:#3f6b52;
+    --accent-soft:#e3ecdf;
+    --bubble-user:#3f6b52;
+    --bubble-user-text:#fffdf8;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--paper);
+    font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .app{
+    width:100%;
+    max-width:480px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    overflow:hidden;
+    box-shadow:0 1px 0 var(--line);
+    display:flex;
+    flex-direction:column;
+    height:640px;
+  }
+  header{
+    padding:18px 20px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .avatar{
+    width:38px;height:38px;border-radius:50%;
+    background:var(--accent);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--panel);font-weight:600;font-size:16px;
+    flex-shrink:0;
+  }
+  header h1{
+    font-size:16px;
+    margin:0;
+    font-weight:600;
+  }
+  header p{
+    margin:2px 0 0;
+    font-size:12.5px;
+    color:#7a7364;
+  }
+  .messages{
+    flex:1;
+    overflow-y:auto;
+    padding:20px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .msg{
+    max-width:78%;
+    padding:10px 14px;
+    border-radius:14px;
+    font-size:14.5px;
+    line-height:1.45;
+    white-space:pre-wrap;
+  }
+  .msg.bot{
+    align-self:flex-start;
+    background:var(--accent-soft);
+    border-bottom-left-radius:4px;
+  }
+  .msg.user{
+    align-self:flex-end;
+    background:var(--bubble-user);
+    color:var(--bubble-user-text);
+    border-bottom-right-radius:4px;
+  }
+  .typing{
+    align-self:flex-start;
+    display:flex;
+    gap:4px;
+    padding:12px 14px;
+    background:var(--accent-soft);
+    border-radius:14px;
+    border-bottom-left-radius:4px;
+  }
+  .typing span{
+    width:6px;height:6px;border-radius:50%;
+    background:#7a8f7f;
+    animation:bounce 1.2s infinite;
+  }
+  .typing span:nth-child(2){animation-delay:.15s;}
+  .typing span:nth-child(3){animation-delay:.3s;}
+  @keyframes bounce{
+    0%,60%,100%{transform:translateY(0);opacity:.5;}
+    30%{transform:translateY(-4px);opacity:1;}
+  }
+  #chat-form{
+    display:flex;
+    gap:8px;
+    padding:14px;
+    border-top:1px solid var(--line);
+    background:var(--panel);
+  }
+  input{
+    flex:1;
+    padding:10px 14px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    font-size:14px;
+    background:var(--paper);
+    color:var(--ink);
+  }
+  input:focus{
+    outline:none;
+    border-color:var(--accent);
+  }
+  button{
+    padding:10px 18px;
+    border-radius:10px;
+    border:none;
+    background:var(--accent);
+    color:var(--panel);
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  button:hover{opacity:.9;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div class="avatar">P</div>
+    <div>
+      <h1>Pixel</h1>
+      <p>A small chat companion, running fully in your browser</p>
+    </div>
+  </header>
+
+  <div class="messages" id="messages"></div>
+
+  <div id="chat-form">
+    <input id="chat-input" type="text" placeholder="Say something…" autocomplete="off" />
+    <button id="send-btn" type="button">Send</button>
+  </div>
+</div>
+
+<script>
+  const messagesEl = document.getElementById('messages');
+  const sendBtn = document.getElementById('send-btn');
+  const inputEl = document.getElementById('chat-input');
+
+  // ---- Simple rule-based response engine ----
+  // Each rule: a list of trigger words/phrases + a list of possible replies.
+  // The first matching rule wins. Feel free to add your own rules below.
+  const rules = [
+    { triggers: ['hello', 'hi', 'hey'], replies: [
+      "Hey there! What's on your mind?",
+      "Hi! How can I help today?"
+    ]},
+    { triggers: ['how are you'], replies: [
+      "Running smoothly, thanks for asking! How about you?"
+    ]},
+    { triggers: ['name'], replies: [
+      "I'm Pixel, your tiny in-browser chat companion."
+    ]},
+    { triggers: ['bye', 'goodbye', 'see you'], replies: [
+      "Goodbye! Come back anytime.",
+      "See you later!"
+    ]},
+    { triggers: ['thank'], replies: [
+      "You're welcome!",
+      "Anytime!"
+    ]},
+    { triggers: ['joke'], replies: [
+      "Why do programmers prefer dark mode? Because light attracts bugs."
+    ]},
+    { triggers: ['time'], replies: [
+      () => `Right now it's ${new Date().toLocaleTimeString()} on your device.`
+    ]},
+    { triggers: ['date'], replies: [
+      () => `Today's date is ${new Date().toLocaleDateString()}.`
+    ]},
+    { triggers: ['help'], replies: [
+      "Try asking me about the time, the date, or just say hello. I'm a simple rule-based bot — you can teach me new replies by editing the 'rules' list in the code."
+    ]}
+  ];
+
+  const fallbacks = [
+    "Interesting — tell me more.",
+    "I'm not sure I follow, but I'm listening.",
+    "Got it. What else is on your mind?",
+    "I'm a simple bot, so I might not have a great answer for that — but go on."
+  ];
+
+  function pick(arr){
+    const item = arr[Math.floor(Math.random() * arr.length)];
+    return typeof item === 'function' ? item() : item;
+  }
+
+  function getResponse(text){
+    const lower = text.toLowerCase();
+    for (const rule of rules){
+      if (rule.triggers.some(t => lower.includes(t))){
+        return pick(rule.replies);
+      }
+    }
+    return pick(fallbacks);
+  }
+
+  function addMessage(text, sender){
+    const div = document.createElement('div');
+    div.className = `msg ${sender}`;
+    div.textContent = text;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function showTyping(){
+    const div = document.createElement('div');
+    div.className = 'typing';
+    div.id = 'typing-indicator';
+    div.innerHTML = '<span></span><span></span><span></span>';
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function hideTyping(){
+    const el = document.getElementById('typing-indicator');
+    if (el) el.remove();
+  }
+
+  function sendMessage(){
+    const text = inputEl.value.trim();
+    if (!text) return;
+
+    addMessage(text, 'user');
+    inputEl.value = '';
+    inputEl.focus();
+
+    showTyping();
+    const delay = 500 + Math.random() * 600;
+    setTimeout(() => {
+      hideTyping();
+      addMessage(getResponse(text), 'bot');
+    }, delay);
+  }
+
+  sendBtn.addEventListener('click', sendMessage);
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter'){
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // Greet on load
+  window.addEventListener('load', () => {
+    setTimeout(() => addMessage("Hi! I'm Pixel. Say hello or ask what I can do.", 'bot'), 400);
+  });
+</script>
+
+</body>
+</html>
